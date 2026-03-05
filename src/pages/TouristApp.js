@@ -157,7 +157,7 @@ export default function TouristApp() {
     out body;
   `;
   try {
-    const res = await fetch('https://overpass.kumi.systems/api/interpreter', {
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
       body: query,
     });
