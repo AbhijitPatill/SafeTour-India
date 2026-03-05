@@ -260,31 +260,52 @@ export default function TouristApp() {
 };
 
   const generateDigitalId = async () => {
-    if (!form.name || !form.nationality || !form.idNumber) { alert('Please fill all fields!'); return; }
-    setSaving(true);
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      alert('⏳ Please confirm the transaction in MetaMask...');
-      const tx = await contract.mintTouristID(form.name, form.nationality, form.idType, form.idNumber);
-      alert('⛓️ Transaction submitted! Waiting for confirmation...');
-      const receipt = await tx.wait();
-      const event = receipt.logs.map(log => { try { return contract.interface.parseLog(log); } catch { return null; } }).find(e => e && e.name === 'TouristIDMinted');
-      const realTokenId = event ? event.args.tokenId.toString() : 'N/A';
-      const id = { walletAddress: wallet, name: form.name, nationality: form.nationality, idType: form.idType, idNumber: form.idNumber, tokenId: '#TID-' + realTokenId, issuedAt: new Date().toISOString(), txHash: receipt.hash };
-      const { error } = await supabase.from('tourists').insert([{ name: form.name, aadhaar: form.idNumber, wallet_address: wallet, token_id: id.tokenId, lat: null, lng: null }]);
-      setSaving(false);
-      if (error) { alert('❌ Failed to save: ' + error.message); return; }
-      setDigitalId(id);
-      setStep('map');
-    } catch (err) {
-      setSaving(false);
-      if (err.code === 'ACTION_REJECTED') alert('❌ Transaction rejected.');
-      else if (err.message?.includes('Wallet already has a Tourist ID')) alert('⚠️ This wallet already has a Tourist ID!');
-      else alert('❌ Error: ' + err.message);
+  if (!form.name || !form.nationality || !form.idNumber) { setError('Please fill all fields.'); return; }
+  setSaving(true); setError('');
+  try {
+    alert('⏳ Minting your Digital ID — no gas required...');
+    const res = await fetch('https://safetour-india.onrender.com/mint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        wallet_address: wallet,
+        name: form.name,
+        nationality: form.nationality,
+        id_type: form.idType,
+        id_number: form.idNumber,
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      alert('❌ Minting failed: ' + (data.error || 'Unknown error'));
+      setSaving(false); return;
     }
-  };
+    const id = {
+      walletAddress: wallet,
+      name: form.name,
+      nationality: form.nationality,
+      idType: form.idType,
+      idNumber: form.idNumber,
+      tokenId: '#TID-' + data.token_id,
+      issuedAt: new Date().toISOString(),
+      txHash: data.tx_hash,
+    };
+    const { error } = await supabase.from('tourists').insert([{
+      name: form.name,
+      aadhaar: form.idNumber,
+      wallet_address: wallet,
+      token_id: id.tokenId,
+      lat: null, lng: null
+    }]);
+    setSaving(false);
+    if (error) { alert('❌ Failed to save: ' + error.message); return; }
+    setDigitalId(id);
+    setStep('map');
+  } catch (err) {
+    setSaving(false);
+    alert('❌ Error: ' + err.message);
+  }
+};
 
   const sendSOS = async () => {
     if (!userPos) { alert('⚠️ GPS not active yet!'); return; }

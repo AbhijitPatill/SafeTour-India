@@ -9,16 +9,14 @@ export default function LandingPage() {
   const [counts, setCounts] = useState({ tourists: 0, alerts: 0, zones: 0, uptime: 0 });
 
   const goTourist = () => {
-    if (user && role === 'tourist') navigate('/tourist');
-    else if (user && role === 'admin') navigate('/admin');
-    else navigate('/login');
-  };
+  if (user && role === 'tourist') navigate('/tourist');
+  else navigate('/login');
+};
 
-  const goAdmin = () => {
-    if (user && role === 'admin') navigate('/admin');
-    else if (user && role === 'tourist') navigate('/tourist');
-    else navigate('/admin-login');
-  };
+const goAdmin = () => {
+  if (user && role === 'admin') navigate('/admin');
+  else navigate('/admin-login');
+};
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -161,16 +159,12 @@ export default function LandingPage() {
             and AI anomaly detection into one unified safety platform.
           </p>
           <div style={s.ctaRow} className="in4">
-            <button className="btn btn-lg btn-blue" onClick={goTourist}>
-              {user && role === 'tourist' ? 'Go to Dashboard →' :
-               user && role === 'admin' ? 'Open Admin Panel →' :
-               'Register as Tourist'}
-            </button>
-            <button className="btn btn-lg btn-outline" onClick={goAdmin}>
-              {user && role === 'admin' ? 'Open Admin Panel →' :
-               user && role === 'tourist' ? 'Go to Dashboard →' :
-               'Authority Dashboard'}
-            </button>
+           <button className="btn btn-lg btn-blue" onClick={goTourist}>
+  {user && role === 'tourist' ? 'Go to Dashboard →' : 'Register as Tourist →'}
+</button>
+<button className="btn btn-lg btn-outline" onClick={goAdmin}>
+  {user && role === 'admin' ? 'Open Admin Panel →' : 'Authority Dashboard →'}
+</button>
           </div>
           <div style={s.tags} className="in5">
             {['Ethereum Sepolia', 'Isolation Forest ML', 'Supabase Realtime', 'SIH 2025'].map((t, i) => (

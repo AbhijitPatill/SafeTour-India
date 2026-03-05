@@ -23,17 +23,33 @@ export default function LoginPage() {
     navigate('/tourist');
   };
 
-  const handleRegister = async () => {
-    if (!form.email || !form.password || !form.confirmPassword) { setError('Please fill all fields.'); return; }
-    if (form.password !== form.confirmPassword) { setError('Passwords do not match.'); return; }
-    if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
-    setLoading(true); setError('');
-    const { error } = await supabase.auth.signUp({ email: form.email, password: form.password });
-    setLoading(false);
-    if (error) { setError(error.message); return; }
-    alert('✅ Account created! Please check your email and click the confirmation link before logging in.');
-    setMode('login');
-  };
+ const handleRegister = async () => {
+  if (!form.email || !form.password || !form.confirmPassword) { setError('Please fill all fields.'); return; }
+  if (form.password !== form.confirmPassword) { setError('Passwords do not match.'); return; }
+  if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+  setLoading(true); setError('');
+  
+  const { data, error } = await supabase.auth.signUp({ 
+  email: form.email, 
+  password: form.password,
+  options: {
+    emailRedirectTo: 'https://safe-tour-india.vercel.app/login'
+  }
+});
+
+setLoading(false);
+if (error) { setError(error.message); return; }
+
+// If user already exists, Supabase returns an identities array that is empty
+if (data?.user?.identities?.length === 0) {
+  setError('An account with this email already exists. Please sign in instead.');
+  setMode('login');
+  return;
+}
+
+alert('✅ Account created! Check your email and click the confirmation link.');
+setMode('login');
+};
 
   return (
     <div style={s.root}>
