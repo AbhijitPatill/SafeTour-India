@@ -80,7 +80,7 @@ function LocationTracker({ setUserPos, geofences, setAlerts, setGpsStatus, digit
         });
 
         try {
-          const mlResponse = await fetch('http://127.0.0.1:5000/detect', {
+          const mlResponse = await fetch('https://safetour-india.onrender.com/detect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ lat, lng, speed: position.coords.speed ? position.coords.speed * 3.6 : speed, time_in_zone: timeInZone, activity_type: 0 })
