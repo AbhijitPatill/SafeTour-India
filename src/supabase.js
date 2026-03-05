@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable no-unused-expressions */
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://wkygsklerlmideywkuyk.supabase.co';
