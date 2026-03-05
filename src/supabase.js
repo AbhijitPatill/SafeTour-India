@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://wkygsklerlmideywkuyk.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndreWdza2xlcmxtaWRleXdrdXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzM2MzMsImV4cCI6MjA4ODA0OTYzM30.dp3MJhb2xUVS-ZEuOLYzVYThe5ajfJdbNY28YGeZjPQ';
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+```
+
+**3. Make sure `.env` is in `.gitignore`** — open `.gitignore` and check it has:
+```
+.env
