@@ -25,14 +25,16 @@
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ],
-    "rules": {
-      "no-unused-expressions": "off"
-    }
-  },
+  "extends": [
+    "react-app",
+    "react-app/jest"
+  ],
+  "rules": {
+    "no-unused-expressions": "off",
+    "react-hooks/exhaustive-deps": "off",
+    "no-unused-vars": "warn"
+  }
+},
   "browserslist": {
     "production": [
       ">0.2%",
