@@ -128,6 +128,7 @@ function LocationTracker({ setUserPos, geofences, setAlerts, setGpsStatus, digit
 
 export default function TouristApp() {
   // eslint-disable-next-line no-unused-vars
+  const [error, setError] = useState('');
   const [servicesLoading, setServicesLoading] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [wallet, setWallet] = useState(null);
