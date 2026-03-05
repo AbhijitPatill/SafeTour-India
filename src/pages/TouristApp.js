@@ -157,7 +157,7 @@ export default function TouristApp() {
     out body;
   `;
   try {
-    const res = await fetch('https://overpass-api.de/api/interpreter', {
+    const res = await fetch('https://maps.mail.ru/osm/tools/overpass/api/interpreter', {
       method: 'POST',
       body: query,
     });
@@ -197,12 +197,41 @@ export default function TouristApp() {
     }
   };
 
-  const connectWallet = async () => {
+ const connectWallet = async () => {
   if (!window.ethereum) { alert('MetaMask not found! Please install MetaMask.'); return; }
   setConnecting(true);
   try {
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
     const connectedWallet = accounts[0];
+
+    // ── Auto-switch to Sepolia ──────────────────────────────
+    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+    if (chainId !== '0xaa36a7') {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0xaa36a7' }],
+        });
+      } catch (switchErr) {
+        // Sepolia not in MetaMask yet — add it automatically
+        if (switchErr.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0xaa36a7',
+              chainName: 'Sepolia Testnet',
+              nativeCurrency: { name: 'SepoliaETH', symbol: 'ETH', decimals: 18 },
+              rpcUrls: ['https://rpc.sepolia.org'],
+              blockExplorerUrls: ['https://sepolia.etherscan.io'],
+            }],
+          });
+        } else {
+          throw switchErr;
+        }
+      }
+    }
+    // ───────────────────────────────────────────────────────
+
     setWallet(connectedWallet);
     const provider = new ethers.JsonRpcProvider('https://eth-sepolia.g.alchemy.com/v2/n10eM18VGMrvNFTr9Fbba');
     const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
