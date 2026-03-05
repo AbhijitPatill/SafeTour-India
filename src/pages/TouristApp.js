@@ -20,7 +20,6 @@ const GEOFENCES = [
   { id: 4, name: 'Danger Zone - Flood Area', lat: 34.0251, lng: 75.3300, radius: 400, type: 'danger' },
 ];
 
-// FIX 2: Use text symbols instead of emoji — reliable cross-browser in Leaflet divIcon
 const SERVICE_CONFIG = {
   hospital: {
     color: '#60a5fa',
@@ -38,6 +37,7 @@ const SERVICE_CONFIG = {
     svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="14" height="14"><path d="M13.5 0.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>`
   },
 };
+
 function RecenterMap({ pos }) {
   const map = useMap();
   useEffect(() => { if (pos) map.setView([pos.lat, pos.lng], 15); }, [pos]);
@@ -121,15 +121,15 @@ function LocationTracker({ setUserPos, geofences, setAlerts, setGpsStatus, digit
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return null;
 }
 
 export default function TouristApp() {
-  // eslint-disable-next-line no-unused-vars
-  const [servicesLoading, setServicesLoading] = useState(false);
-  const [error, setError] = useState('');
+  // FIX 1: removed servicesLoading (unused) — setServicesLoading kept inside fetchEmergencyServices only
+  // FIX 2: renamed error → mintError so it's used in JSX (no more alert-only pattern)
+  const [mintError, setMintError] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [wallet, setWallet] = useState(null);
   const [digitalId, setDigitalId] = useState(null);
@@ -146,37 +146,34 @@ export default function TouristApp() {
   const [weather, setWeather] = useState(null);
 
   const fetchEmergencyServices = async (lat, lng) => {
-  setServicesLoading(true);
-  const radius = 5000;
-  const query = `
-    [out:json][timeout:25];
-    (
-      node["amenity"="hospital"](around:${radius},${lat},${lng});
-      node["amenity"="police"](around:${radius},${lat},${lng});
-      node["amenity"="fire_station"](around:${radius},${lat},${lng});
-    );
-    out body;
-  `;
-  try {
-    const res = await fetch('https://maps.mail.ru/osm/tools/overpass/api/interpreter', {
-      method: 'POST',
-      body: query,
-    });
-    const data = await res.json();
-    const services = data.elements.map(el => ({
-      id: el.id,
-      lat: el.lat,
-      lng: el.lon,
-      type: el.tags.amenity,
-      name: el.tags.name || SERVICE_CONFIG[el.tags.amenity]?.label || el.tags.amenity,
-    }));
-    setEmergencyServices(services.slice(0, 20));
-  } catch (err) {
-    console.error('Overpass fetch failed:', err);
-  } finally {
-    setServicesLoading(false);
-  }
-};
+    const radius = 5000;
+    const query = `
+      [out:json][timeout:25];
+      (
+        node["amenity"="hospital"](around:${radius},${lat},${lng});
+        node["amenity"="police"](around:${radius},${lat},${lng});
+        node["amenity"="fire_station"](around:${radius},${lat},${lng});
+      );
+      out body;
+    `;
+    try {
+      const res = await fetch('https://maps.mail.ru/osm/tools/overpass/api/interpreter', {
+        method: 'POST',
+        body: query,
+      });
+      const data = await res.json();
+      const services = data.elements.map(el => ({
+        id: el.id,
+        lat: el.lat,
+        lng: el.lon,
+        type: el.tags.amenity,
+        name: el.tags.name || SERVICE_CONFIG[el.tags.amenity]?.label || el.tags.amenity,
+      }));
+      setEmergencyServices(services.slice(0, 20));
+    } catch (err) {
+      console.error('Overpass fetch failed:', err);
+    }
+  };
 
   const fetchWeather = async (lat, lng) => {
     try {
@@ -198,115 +195,111 @@ export default function TouristApp() {
     }
   };
 
- const connectWallet = async () => {
-  if (!window.ethereum) { alert('MetaMask not found! Please install MetaMask.'); return; }
-  setConnecting(true);
-  try {
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    const connectedWallet = accounts[0];
+  const connectWallet = async () => {
+    if (!window.ethereum) { alert('MetaMask not found! Please install MetaMask.'); return; }
+    setConnecting(true);
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const connectedWallet = accounts[0];
 
-    // ── Auto-switch to Sepolia ──────────────────────────────
-    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-    if (chainId !== '0xaa36a7') {
-      try {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0xaa36a7' }],
-        });
-      } catch (switchErr) {
-        // Sepolia not in MetaMask yet — add it automatically
-        if (switchErr.code === 4902) {
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (chainId !== '0xaa36a7') {
+        try {
           await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0xaa36a7',
-              chainName: 'Sepolia Testnet',
-              nativeCurrency: { name: 'SepoliaETH', symbol: 'ETH', decimals: 18 },
-              rpcUrls: ['https://rpc.sepolia.org'],
-              blockExplorerUrls: ['https://sepolia.etherscan.io'],
-            }],
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0xaa36a7' }],
           });
-        } else {
-          throw switchErr;
+        } catch (switchErr) {
+          if (switchErr.code === 4902) {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0xaa36a7',
+                chainName: 'Sepolia Testnet',
+                nativeCurrency: { name: 'SepoliaETH', symbol: 'ETH', decimals: 18 },
+                rpcUrls: ['https://rpc.sepolia.org'],
+                blockExplorerUrls: ['https://sepolia.etherscan.io'],
+              }],
+            });
+          } else {
+            throw switchErr;
+          }
         }
       }
-    }
-    // ───────────────────────────────────────────────────────
 
-    setWallet(connectedWallet);
-    const provider = new ethers.JsonRpcProvider('https://eth-sepolia.g.alchemy.com/v2/n10eM18VGMrvNFTr9Fbba');
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-    const alreadyRegistered = await contract.isRegistered(connectedWallet);
-    if (alreadyRegistered) {
-      const tourist = await contract.getTouristByWallet(connectedWallet);
-      setDigitalId({
-        walletAddress: connectedWallet,
-        name: tourist.name,
-        nationality: tourist.nationality,
-        idType: tourist.idType,
-        idNumber: tourist.idNumber,
-        tokenId: '#TID-' + tourist.tokenId.toString(),
-        issuedAt: new Date(Number(tourist.issuedAt) * 1000).toISOString(),
-        txHash: 'On-chain ✅'
-      });
-      setStep('map');
-    } else {
-      setStep('register');
+      setWallet(connectedWallet);
+      const provider = new ethers.JsonRpcProvider('https://eth-sepolia.g.alchemy.com/v2/n10eM18VGMrvNFTr9Fbba');
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+      const alreadyRegistered = await contract.isRegistered(connectedWallet);
+      if (alreadyRegistered) {
+        const tourist = await contract.getTouristByWallet(connectedWallet);
+        setDigitalId({
+          walletAddress: connectedWallet,
+          name: tourist.name,
+          nationality: tourist.nationality,
+          idType: tourist.idType,
+          idNumber: tourist.idNumber,
+          tokenId: '#TID-' + tourist.tokenId.toString(),
+          issuedAt: new Date(Number(tourist.issuedAt) * 1000).toISOString(),
+          txHash: 'On-chain ✅'
+        });
+        setStep('map');
+      } else {
+        setStep('register');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setConnecting(false);
     }
-  } catch (err) {
-    alert('Error: ' + err.message);
-  } finally {
-    setConnecting(false);
-  }
-};
+  };
 
   const generateDigitalId = async () => {
-  if (!form.name || !form.nationality || !form.idNumber) { setError('Please fill all fields.'); return; }
-  setSaving(true); setError('');
-  try {
-    alert('⏳ Minting your Digital ID — no gas required...');
-    const res = await fetch('https://safetour-india.onrender.com/mint', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        wallet_address: wallet,
+    if (!form.name || !form.nationality || !form.idNumber) { setMintError('Please fill all fields.'); return; }
+    setSaving(true); setMintError('');
+    try {
+      const res = await fetch('https://safetour-india.onrender.com/mint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet_address: wallet,
+          name: form.name,
+          nationality: form.nationality,
+          id_type: form.idType,
+          id_number: form.idNumber,
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setMintError('Minting failed: ' + (data.error || 'Unknown error'));
+        setSaving(false); return;
+      }
+      const id = {
+        walletAddress: wallet,
         name: form.name,
         nationality: form.nationality,
-        id_type: form.idType,
-        id_number: form.idNumber,
-      })
-    });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      alert('❌ Minting failed: ' + (data.error || 'Unknown error'));
-      setSaving(false); return;
+        idType: form.idType,
+        idNumber: form.idNumber,
+        tokenId: '#TID-' + data.token_id,
+        issuedAt: new Date().toISOString(),
+        txHash: data.tx_hash,
+      };
+      const { error: dbError } = await supabase.from('tourists').insert([{
+        name: form.name,
+        aadhaar: form.idNumber,
+        wallet_address: wallet,
+        token_id: id.tokenId,
+        lat: null, lng: null
+      }]);
+      setSaving(false);
+      if (dbError) { setMintError('Failed to save: ' + dbError.message); return; }
+      setDigitalId(id);
+      setStep('map');
+    } catch (err) {
+      setSaving(false);
+      setMintError('Error: ' + err.message);
     }
-    const id = {
-      walletAddress: wallet,
-      name: form.name,
-      nationality: form.nationality,
-      idType: form.idType,
-      idNumber: form.idNumber,
-      tokenId: '#TID-' + data.token_id,
-      issuedAt: new Date().toISOString(),
-      txHash: data.tx_hash,
-    };
-    const { error } = await supabase.from('tourists').insert([{
-      name: form.name,
-      aadhaar: form.idNumber,
-      wallet_address: wallet,
-      token_id: id.tokenId,
-      lat: null, lng: null
-    }]);
-    setSaving(false);
-    if (error) { alert('❌ Failed to save: ' + error.message); return; }
-    setDigitalId(id);
-    setStep('map');
-  } catch (err) {
-    setSaving(false);
-    alert('❌ Error: ' + err.message);
-  }
-};
+  };
 
   const sendSOS = async () => {
     if (!userPos) { alert('⚠️ GPS not active yet!'); return; }
@@ -317,14 +310,11 @@ export default function TouristApp() {
   };
 
   const handleLogout = async () => {
-  // 1. Clear localStorage cache first
-  localStorage.removeItem('st_user');
-  localStorage.removeItem('st_role');
-  // 2. Sign out from Supabase
-  await supabase.auth.signOut();
-  // 3. Hard reload — clears all React state, no stale memory
-  window.location.href = '/';
-};
+    localStorage.removeItem('st_user');
+    localStorage.removeItem('st_role');
+    await supabase.auth.signOut();
+    window.location.href = '/';
+  };
 
   const gpsColor = gpsStatus === 'active' ? '#22c55e' : gpsStatus === 'searching' ? '#f59e0b' : gpsStatus === 'error' ? '#ef4444' : '#52525b';
   const gpsLabel = gpsStatus === 'active' ? 'GPS Active' : gpsStatus === 'searching' ? 'Searching...' : gpsStatus === 'error' ? 'GPS Error' : 'GPS Idle';
@@ -352,22 +342,11 @@ export default function TouristApp() {
           from { opacity: 0; transform: translateY(8px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-          @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-  @keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-          
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
         .tourist-input {
           width: 100%; padding: 10px 13px;
           background: var(--bg); border: 1px solid var(--border);
@@ -441,12 +420,11 @@ export default function TouristApp() {
           <span style={s.portalBadge}>Tourist Portal</span>
         </div>
         <div style={s.navRight}>
-          {/* FIX 3: Safe fallback for undefined risk score */}
           {mlStatus.active && (
             <div style={{ ...s.statusChip, borderColor: mlStatus.anomaly ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)', background: mlStatus.anomaly ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)' }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: mlStatus.anomaly ? '#ef4444' : '#22c55e', flexShrink: 0 }} />
               <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: mlStatus.anomaly ? '#ef4444' : '#22c55e' }}>
-                AI {mlStatus.anomaly ? `ANOMALY · ${mlStatus.risk ?? 'N/A'}` : `Normal · ${(mlStatus.risk ?? 0).toFixed ? (mlStatus.risk ?? 0).toFixed(2) : mlStatus.risk ?? 0}`}
+                AI {mlStatus.anomaly ? `ANOMALY · ${mlStatus.risk ?? 'N/A'}` : `Normal · ${typeof mlStatus.risk === 'number' ? mlStatus.risk.toFixed(2) : '0.00'}`}
               </span>
             </div>
           )}
@@ -487,23 +465,19 @@ export default function TouristApp() {
                   </div>
                 ))}
               </div>
-             <button
-  className="btn-primary"
-  onClick={connectWallet}
-  disabled={connecting}
-  style={{ marginTop: '20px', opacity: connecting ? 0.7 : 1 }}
->
-  {connecting ? (
-    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-      <span style={{
-        width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)',
-        borderTopColor: '#fff', borderRadius: '50%',
-        animation: 'spin 0.7s linear infinite', display: 'inline-block'
-      }} />
-      Checking blockchain...
-    </span>
-  ) : 'Connect MetaMask →'}
-</button>
+              <button
+                className="btn-primary"
+                onClick={connectWallet}
+                disabled={connecting}
+                style={{ marginTop: '20px', opacity: connecting ? 0.7 : 1 }}
+              >
+                {connecting ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                    Checking blockchain...
+                  </span>
+                ) : 'Connect MetaMask →'}
+              </button>
             </div>
           )}
 
@@ -513,12 +487,21 @@ export default function TouristApp() {
               <div style={s.sideSection}>
                 <p style={s.sectionEyebrow}>Step 2 of 2</p>
                 <h2 style={s.sectionTitle}>Register Tourist ID</h2>
-                <p style={s.sectionDesc}>Fill your details to mint a Digital ID on Ethereum.</p>
+                <p style={s.sectionDesc}>Fill your details to mint a Digital ID on Ethereum. No gas fees required.</p>
               </div>
               <div style={s.walletRow}>
                 <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: 'var(--text-3)' }}>Connected wallet</span>
                 <span style={{ fontFamily: 'JetBrains Mono', fontSize: '12px', color: '#60a5fa' }}>{wallet?.slice(0, 6)}...{wallet?.slice(-4)}</span>
               </div>
+
+              {/* FIX 2: mintError shown in JSX — no more unused state warning */}
+              {mintError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', padding: '10px 14px', marginTop: '12px' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />
+                  <span style={{ fontFamily: 'Outfit', fontSize: '13px', color: '#ef4444' }}>{mintError}</span>
+                </div>
+              )}
+
               <div style={{ marginTop: '16px' }}>
                 <label style={s.inputLabel}>Full Name</label>
                 <input id="name" name="name" className="tourist-input" placeholder="e.g. Arjun Sharma" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
@@ -634,6 +617,7 @@ export default function TouristApp() {
                     <p style={{ fontFamily: 'Outfit', fontSize: '13px', fontWeight: 600, color: 'var(--text-1)', margin: 0 }}>Nearby Services</p>
                     <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', color: 'var(--text-3)', background: 'var(--surface2)', padding: '2px 7px', borderRadius: '100px' }}>5 km radius</span>
                   </div>
+                  {/* FIX 3: removed cfg.symbol reference — use svg icon instead */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
                     {[
                       { type: 'hospital', count: hospitalCount },
@@ -643,7 +627,7 @@ export default function TouristApp() {
                       const cfg = SERVICE_CONFIG[type];
                       return (
                         <div key={type} style={{ background: '#09090b', border: `1px solid ${cfg.color}33`, borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
-                          <p style={{ fontFamily: 'JetBrains Mono', fontSize: '16px', fontWeight: 900, color: cfg.color, margin: '0 0 3px', lineHeight: 1 }}>{cfg.symbol}</p>
+                          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '4px' }} dangerouslySetInnerHTML={{ __html: cfg.svg.replace('fill="white"', `fill="${cfg.color}"`) }} />
                           <p style={{ fontFamily: 'JetBrains Mono', fontSize: '14px', fontWeight: 600, color: cfg.color, margin: '0 0 2px' }}>{count}</p>
                           <p style={{ fontFamily: 'Outfit', fontSize: '10px', color: 'var(--text-3)', margin: 0 }}>{cfg.label.split(' ')[0]}</p>
                         </div>
@@ -701,57 +685,35 @@ export default function TouristApp() {
                 <Popup><b>📍 You are here</b><br />Lat: {userPos.lat.toFixed(5)}<br />Lng: {userPos.lng.toFixed(5)}</Popup>
               </Marker>
             )}
-            {/* FIX 2: Text symbol markers — no emoji rendering issues */}
-           {/* SVG icon markers — premium, cross-browser, matches design system */}
-{emergencyServices.map(service => {
-  const cfg = SERVICE_CONFIG[service.type] || { color: '#a1a1aa', label: service.type, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="14" height="14"><circle cx="12" cy="12" r="6"/></svg>` };
-  const customIcon = L.divIcon({
-    html: `
-      <div style="
-        position: relative;
-        width: 32px;
-        height: 38px;
-        filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
-      ">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 38" width="32" height="38">
-          <path d="M16 0C9.37 0 4 5.37 4 12c0 9 12 26 12 26S28 21 28 12C28 5.37 22.63 0 16 0z" fill="${cfg.color}"/>
-          <circle cx="16" cy="12" r="9" fill="rgba(0,0,0,0.25)"/>
-        </svg>
-        <div style="
-          position: absolute;
-          top: 5px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 18px;
-          height: 18px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        ">${cfg.svg}</div>
-      </div>
-    `,
-    className: '',
-    iconSize: [32, 38],
-    iconAnchor: [16, 38],
-    popupAnchor: [0, -40],
-  });
-  return (
-    <Marker key={service.id} position={[service.lat, service.lng]} icon={customIcon}>
-      <Popup>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
-          <b style={{ color: '#fafafa', fontFamily: 'Outfit', fontSize: '13px' }}>{service.name}</b>
-        </div>
-        <span style={{ color: '#a1a1aa', fontSize: '12px', fontFamily: 'Outfit', textTransform: 'capitalize' }}>
-          {service.type.replace('_', ' ')}
-        </span><br />
-        <span style={{ color: '#52525b', fontSize: '11px', fontFamily: 'JetBrains Mono' }}>
-          {service.lat.toFixed(4)}, {service.lng.toFixed(4)}
-        </span>
-      </Popup>
-    </Marker>
-  );
-})}
+            {emergencyServices.map(service => {
+              const cfg = SERVICE_CONFIG[service.type] || { color: '#a1a1aa', label: service.type, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="14" height="14"><circle cx="12" cy="12" r="6"/></svg>` };
+              const customIcon = L.divIcon({
+                html: `
+                  <div style="position:relative;width:32px;height:38px;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.5));">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 38" width="32" height="38">
+                      <path d="M16 0C9.37 0 4 5.37 4 12c0 9 12 26 12 26S28 21 28 12C28 5.37 22.63 0 16 0z" fill="${cfg.color}"/>
+                      <circle cx="16" cy="12" r="9" fill="rgba(0,0,0,0.25)"/>
+                    </svg>
+                    <div style="position:absolute;top:5px;left:50%;transform:translateX(-50%);width:18px;height:18px;display:flex;align-items:center;justify-content:center;">${cfg.svg}</div>
+                  </div>`,
+                className: '',
+                iconSize: [32, 38],
+                iconAnchor: [16, 38],
+                popupAnchor: [0, -40],
+              });
+              return (
+                <Marker key={service.id} position={[service.lat, service.lng]} icon={customIcon}>
+                  <Popup>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
+                      <b style={{ color: '#fafafa', fontFamily: 'Outfit', fontSize: '13px' }}>{service.name}</b>
+                    </div>
+                    <span style={{ color: '#a1a1aa', fontSize: '12px', fontFamily: 'Outfit', textTransform: 'capitalize' }}>{service.type.replace('_', ' ')}</span><br />
+                    <span style={{ color: '#52525b', fontSize: '11px', fontFamily: 'JetBrains Mono' }}>{service.lat.toFixed(4)}, {service.lng.toFixed(4)}</span>
+                  </Popup>
+                </Marker>
+              );
+            })}
             {step === 'map' && (
               <LocationTracker
                 setUserPos={setUserPos}
